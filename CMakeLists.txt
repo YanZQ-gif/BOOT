@@ -47,6 +47,8 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user sources here
     APP/LED/led.c
     APP/Printf/printf.c
+    APP/KEY/key.c
+    APP/FLASH/flash.c
     bootloader/ymodem.c
 )
 
@@ -56,6 +58,8 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     bootloader
     APP/LED
     APP/Printf
+    APP/KEY
+    APP/FLASH
 )
 
 # Add project symbols (macros)
@@ -86,6 +90,8 @@ add_executable(bootloader.elf
     bootloader/ymodem.c
     APP/LED/led.c
     APP/Printf/printf.c
+    APP/KEY/key.c
+    APP/FLASH/flash.c
 )
 
 # 设置 Bootloader 链接脚本
@@ -99,6 +105,8 @@ target_include_directories(bootloader.elf PRIVATE
     bootloader
     APP/LED
     APP/Printf
+    APP/KEY
+    APP/FLASH
     Drivers/STM32F7xx_HAL_Driver/Inc
     Drivers/CMSIS/Device/ST/STM32F7xx/Include
     Drivers/CMSIS/Include
