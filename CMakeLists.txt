@@ -57,7 +57,7 @@ target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined symbols
 )
 
-# Remove wrong libob.a library dependency which using cpp files
+# Remove wrong libob.a library dependency when using cpp files
 list(REMOVE_ITEM CMAKE_C_IMPLICIT_LINK_LIBRARIES ob)
 
 # Add linked libraries
@@ -74,10 +74,12 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
 # 创建 Bootloader 可执行文件
 add_executable(bootloader.elf
     Core/Src/main.c
-    bootloader/ymodem.c
     Core/Src/stm32f7xx_hal_msp.c
     Core/Src/system_stm32f7xx.c
     startup_stm32f767xx.s
+    bootloader/ymodem.c
+    APP/LED/led.c
+    APP/Printf/printf.c
 )
 
 # 设置 Bootloader 链接脚本
@@ -89,6 +91,8 @@ target_link_options(bootloader.elf PRIVATE
 target_include_directories(bootloader.elf PRIVATE
     Core/Inc
     bootloader
+    APP/LED
+    APP/Printf
     Drivers/STM32F7xx_HAL_Driver/Inc
 )
 

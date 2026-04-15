@@ -3,7 +3,7 @@
   ******************************************************************************
   * @file           : main.c
   * @brief          : Main program body - Bootloader with YModem
-  * @author         : YanZQ-gif (Modified by MaXQ)
+  * @author         : YanZQ-gif
   * @date           : 2026-04-15
   * @version        : V1.0.0 - Bootloader
   ******************************************************************************
@@ -17,8 +17,9 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "ymodem.h"
+#include "led.h"
+#include "printf.h"
 #include <string.h>
-#include <stdio.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -33,10 +34,6 @@
 #define BOOT_PIN                GPIO_PIN_0
 #define BOOT_GPIO_PORT          GPIOA
 #define BOOT_GPIO_CLK_ENABLE()  __HAL_RCC_GPIOA_CLK_ENABLE()
-
-#define LED_PIN                 GPIO_PIN_1
-#define LED_GPIO_PORT           GPIOB
-#define LED_GPIO_CLK_ENABLE()   __HAL_RCC_GPIOB_CLK_ENABLE()
 
 /* 参数区地址 */
 #define BOOT_PARAM_ADDR         0x0800FC00
@@ -74,60 +71,11 @@ static void EnterBootloaderMode(void);
 static void JumpToApp(void);
 static uint8_t CheckEnterBootloader(void);
 static uint8_t VerifyAppFirmware(void);
-static void LED_Blink(uint32_t times, uint32_t interval);
-static void PrintString(const char *str);
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
-/**
- * @brief  重定向 printf 到 USART1
- *         根据实际硬件配置修改：
- *         - GCC 使用 __io_putchar
- *         - 其他编译器使用 fputc
- */
-#ifdef __GNUC__
-#define PUTCHAR_PROTOTYPE int __io_putchar(int ch)
-#else
-#define PUTCHAR_PROTOTYPE int fputc(int ch, FILE *f)
-#endif
-
-PUTCHAR_PROTOTYPE
-{
-    HAL_UART_Transmit(&huart1, (uint8_t *)&ch, 1, 0xFFFF);
-    return ch;
-}
-
-/**
- * @brief  打印字符串
- */
-static void PrintString(const char *str)
-{
-    HAL_UART_Transmit(&huart1, (uint8_t*)str, strlen(str), 1000);
-}
-
-/**
- * @brief  LED 闪烁
- */
-static void LED_Blink(uint32_t times, uint32_t interval)
-{
-    LED_GPIO_CLK_ENABLE();
-    
-    GPIO_InitTypeDef GPIO_InitStruct = {0};
-    GPIO_InitStruct.Pin = LED_PIN;
-    GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-    HAL_GPIO_Init(LED_GPIO_PORT, &GPIO_InitStruct);
-    
-    for (uint32_t i = 0; i < times; i++) {
-        HAL_GPIO_TogglePin(LED_GPIO_PORT, LED_PIN);
-        HAL_Delay(interval);
-        HAL_GPIO_TogglePin(LED_GPIO_PORT, LED_PIN);
-        HAL_Delay(interval);
-    }
-}
 
 /* USER CODE END 0 */
 
@@ -167,29 +115,40 @@ int main(void)
   
   /* USER CODE BEGIN 2 */
   
+  /* 初始化 Printf 模块 */
+  Printf_Init();
+  
+  /* 初始化 LED 模块 */
+  LED_Init();
+  
   /* 上电指示 */
-  LED_Blink(3, 100);
+  LED_Blink(LED1, 3, 100);
   
   /* 检查是否进入 Bootloader 模式 */
   bIsBootloader = CheckEnterBootloader();
   
   if (bIsBootloader) {
-      printf("\r\n[BOOT] === STM32F767 Bootloader ===\r\n");
+      printf("\r\n");
+      printf("========================================\r\n");
+      printf("  STM32F767 Bootloader\r\n");
+      printf("========================================\r\n");
       printf("[BOOT] 进入 Bootloader 模式\r\n");
-      printf("[BOOT] UART: USART1 (PA9/PA10)\r\n");
+      printf("[BOOT] UART: USART2 (PA2/PA3)\r\n");
       printf("[BOOT] 波特率：115200\r\n");
-      printf("[BOOT] 等待固件升级...\r\n\r\n");
-      LED_Blink(5, 200);  // 5 次慢闪
+      printf("[BOOT] 等待固件升级...\r\n");
+      printf("========================================\r\n\r\n");
+      LED_Blink(LED1, 5, 200);  // 5 次慢闪
   } else {
       /* 检查 APP 是否有效 */
       if (!VerifyAppFirmware()) {
           printf("[BOOT] APP 验证通过，准备跳转...\r\n");
-          LED_Blink(2, 500);  // 2 次快闪
+          LED_Blink(LED2, 2, 500);  // 2 次快闪
+          HAL_Delay(500);
           JumpToApp();
       } else {
           printf("[BOOT] APP 无效，进入 Bootloader\r\n");
           bIsBootloader = 1;
-          LED_Blink(5, 200);
+          LED_Blink(LED1, 5, 200);
       }
   }
   
@@ -204,7 +163,7 @@ int main(void)
   while (1)
   {
       /* 正常情况下不会到这里 */
-      LED_Blink(1, 1000);  // 错误指示
+      LED_Blink(LED1, 1, 1000);  // 错误指示
   }
   /* USER CODE END WHILE */
 
@@ -224,14 +183,14 @@ static void EnterBootloaderMode(void)
     YMODEM_Init();
     
     /* 发送 'C' 启动信号（CRC 模式） */
-    PrintString("C");
+    HAL_UART_Transmit(&huart2, (uint8_t*)"C", 1, 0xFFFF);
     
     printf("[IAP] 已发送启动信号，等待上位机...\r\n");
     
     /* 主循环 - 接收 YModem 数据 */
     while (1) {
         /* 等待 UART 数据 */
-        if (HAL_UART_Receive(&huart1, &rx_byte, 1, 100) == HAL_OK) {
+        if (HAL_UART_Receive(&huart2, &rx_byte, 1, 100) == HAL_OK) {
             /* 处理接收到的字节 */
             ym_ret = YMODEM_ReceiveByte(rx_byte, tx_buffer, &tx_len);
             
@@ -243,14 +202,17 @@ static void EnterBootloaderMode(void)
                 case YMODEM_TX_PENDING:
                     /* 需要发送响应 */
                     if (tx_len > 0) {
-                        HAL_UART_Transmit(&huart1, tx_buffer, tx_len, 1000);
+                        HAL_UART_Transmit(&huart2, tx_buffer, tx_len, 1000);
                     }
                     break;
                     
                 case YMODEM_COMPLETE:
                     /* 升级完成 */
-                    printf("\r\n[IAP] ✓ 固件升级完成！\r\n");
-                    printf("[IAP] 系统将在 2 秒后重启...\r\n");
+                    printf("\r\n");
+                    printf("========================================\r\n");
+                    printf("  [IAP] ✓ 固件升级完成！\r\n");
+                    printf("  [IAP] 系统将在 2 秒后重启...\r\n");
+                    printf("========================================\r\n");
                     
                     /* 设置启动标志 */
                     HAL_FLASH_Unlock();
@@ -448,7 +410,7 @@ void Error_Handler(void)
   while (1)
   {
       /* 错误时快速闪烁 */
-      LED_Blink(1, 50);
+      LED_Blink(LED1, 1, 50);
   }
   /* USER CODE END Error_Handler_Debug */
 }
