@@ -57,7 +57,7 @@ target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined symbols
 )
 
-# Remove wrong libob.a library dependency when using cpp files
+# Remove wrong libob.a library dependency which using cpp files
 list(REMOVE_ITEM CMAKE_C_IMPLICIT_LINK_LIBRARIES ob)
 
 # Add linked libraries
@@ -65,4 +65,40 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
     stm32cubemx
 
     # Add user defined libraries
+)
+
+# ============================================================================
+# Bootloader Target
+# ============================================================================
+
+# 创建 Bootloader 可执行文件
+add_executable(bootloader.elf
+    Core/Src/main.c
+    bootloader/ymodem.c
+    Core/Src/stm32f7xx_hal_msp.c
+    Core/Src/system_stm32f7xx.c
+    startup_stm32f767xx.s
+)
+
+# 设置 Bootloader 链接脚本
+target_link_options(bootloader.elf PRIVATE
+    -T${CMAKE_SOURCE_DIR}/bootloader/STM32F767XX_BOOTLOADER.ld
+)
+
+# 包含头文件
+target_include_directories(bootloader.elf PRIVATE
+    Core/Inc
+    bootloader
+    Drivers/STM32F7xx_HAL_Driver/Inc
+)
+
+# 编译定义
+target_compile_definitions(bootloader.elf PRIVATE
+    USE_HAL_DRIVER
+    STM32F767xx
+)
+
+# 链接库
+target_link_libraries(bootloader.elf
+    stm32cubemx
 )
