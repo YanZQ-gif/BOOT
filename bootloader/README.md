@@ -257,8 +257,8 @@ SCB->VTOR = 0x08010000;
 **USB 转串口模块：**
 ```
 USB-TTL    →    STM32F767
-TX         →    PA3 (USART2_RX)
-RX         →    PA2 (USART2_TX)
+TX         →    PA10 (USART1_RX)
+RX         →    PA9  (USART1_TX)
 GND        →    GND
 3.3V       →    3.3V (可选)
 ```

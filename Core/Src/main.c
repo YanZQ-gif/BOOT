@@ -83,11 +83,20 @@ static void PrintString(const char *str);
 /* USER CODE BEGIN 0 */
 
 /**
- * @brief  重定向 printf 到 USART2
+ * @brief  重定向 printf 到 USART1
+ *         根据实际硬件配置修改：
+ *         - GCC 使用 __io_putchar
+ *         - 其他编译器使用 fputc
  */
-int __io_putchar(int ch)
+#ifdef __GNUC__
+#define PUTCHAR_PROTOTYPE int __io_putchar(int ch)
+#else
+#define PUTCHAR_PROTOTYPE int fputc(int ch, FILE *f)
+#endif
+
+PUTCHAR_PROTOTYPE
 {
-    HAL_UART_Transmit(&huart2, (uint8_t*)&ch, 1, 100);
+    HAL_UART_Transmit(&huart1, (uint8_t *)&ch, 1, 0xFFFF);
     return ch;
 }
 
@@ -96,7 +105,7 @@ int __io_putchar(int ch)
  */
 static void PrintString(const char *str)
 {
-    HAL_UART_Transmit(&huart2, (uint8_t*)str, strlen(str), 1000);
+    HAL_UART_Transmit(&huart1, (uint8_t*)str, strlen(str), 1000);
 }
 
 /**
@@ -165,7 +174,9 @@ int main(void)
   bIsBootloader = CheckEnterBootloader();
   
   if (bIsBootloader) {
-      printf("\r\n[BOOT] 进入 Bootloader 模式\r\n");
+      printf("\r\n[BOOT] === STM32F767 Bootloader ===\r\n");
+      printf("[BOOT] 进入 Bootloader 模式\r\n");
+      printf("[BOOT] UART: USART1 (PA9/PA10)\r\n");
       printf("[BOOT] 波特率：115200\r\n");
       printf("[BOOT] 等待固件升级...\r\n\r\n");
       LED_Blink(5, 200);  // 5 次慢闪
@@ -220,7 +231,7 @@ static void EnterBootloaderMode(void)
     /* 主循环 - 接收 YModem 数据 */
     while (1) {
         /* 等待 UART 数据 */
-        if (HAL_UART_Receive(&huart2, &rx_byte, 1, 100) == HAL_OK) {
+        if (HAL_UART_Receive(&huart1, &rx_byte, 1, 100) == HAL_OK) {
             /* 处理接收到的字节 */
             ym_ret = YMODEM_ReceiveByte(rx_byte, tx_buffer, &tx_len);
             
@@ -232,7 +243,7 @@ static void EnterBootloaderMode(void)
                 case YMODEM_TX_PENDING:
                     /* 需要发送响应 */
                     if (tx_len > 0) {
-                        HAL_UART_Transmit(&huart2, tx_buffer, tx_len, 1000);
+                        HAL_UART_Transmit(&huart1, tx_buffer, tx_len, 1000);
                     }
                     break;
                     
