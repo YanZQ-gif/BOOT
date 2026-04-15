@@ -94,6 +94,8 @@ target_include_directories(bootloader.elf PRIVATE
     APP/LED
     APP/Printf
     Drivers/STM32F7xx_HAL_Driver/Inc
+    Drivers/CMSIS/Device/ST/STM32F7xx/Include
+    Drivers/CMSIS/Include
 )
 
 # 编译定义
