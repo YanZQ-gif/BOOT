@@ -112,7 +112,6 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_USART2_UART_Init();
-  
   /* USER CODE BEGIN 2 */
   
   /* 初始化 Printf 模块 */
@@ -165,204 +164,64 @@ int main(void)
       /* 正常情况下不会到这里 */
       LED_Blink(LED1, 1, 1000);  // 错误指示
   }
-  /* USER CODE END WHILE */
+    /* USER CODE END WHILE */
 
-  /* USER CODE BEGIN 3 */
-}
-
-/* ============================================================================
- * Bootloader 模式实现
- * ============================================================================ */
-
-/**
- * @brief  进入 Bootloader 模式，等待固件升级
- */
-static void EnterBootloaderMode(void)
-{
-    /* 初始化 YModem */
-    YMODEM_Init();
-    
-    /* 发送 'C' 启动信号（CRC 模式） */
-    HAL_UART_Transmit(&huart2, (uint8_t*)"C", 1, 0xFFFF);
-    
-    printf("[IAP] 已发送启动信号，等待上位机...\r\n");
-    
-    /* 主循环 - 接收 YModem 数据 */
-    while (1) {
-        /* 等待 UART 数据 */
-        if (HAL_UART_Receive(&huart2, &rx_byte, 1, 100) == HAL_OK) {
-            /* 处理接收到的字节 */
-            ym_ret = YMODEM_ReceiveByte(rx_byte, tx_buffer, &tx_len);
-            
-            switch (ym_ret) {
-                case YMODEM_OK:
-                    /* 继续接收 */
-                    break;
-                    
-                case YMODEM_TX_PENDING:
-                    /* 需要发送响应 */
-                    if (tx_len > 0) {
-                        HAL_UART_Transmit(&huart2, tx_buffer, tx_len, 1000);
-                    }
-                    break;
-                    
-                case YMODEM_COMPLETE:
-                    /* 升级完成 */
-                    printf("\r\n");
-                    printf("========================================\r\n");
-                    printf("  [IAP] ✓ 固件升级完成！\r\n");
-                    printf("  [IAP] 系统将在 2 秒后重启...\r\n");
-                    printf("========================================\r\n");
-                    
-                    /* 设置启动标志 */
-                    HAL_FLASH_Unlock();
-                    uint32_t flag = BOOT_FLAG_APP;
-                    HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD, BOOT_FLAG_ADDR, flag);
-                    HAL_FLASH_Lock();
-                    
-                    /* 延时后重启 */
-                    HAL_Delay(2000);
-                    NVIC_SystemReset();
-                    break;
-                    
-                case YMODEM_ABORTED:
-                    /* 升级被取消 */
-                    printf("\r\n[IAP] ⚠ 升级被取消\r\n");
-                    break;
-                    
-                case YMODEM_WRITE_ERR:
-                    /* Flash 写入错误 */
-                    printf("\r\n[IAP] ❌ Flash 写入错误！\r\n");
-                    break;
-                    
-                case YMODEM_SIZE_ERR:
-                    /* 文件过大 */
-                    printf("\r\n[IAP] ❌ 固件文件过大！\r\n");
-                    break;
-                    
-                default:
-                    break;
-            }
-        }
-    }
+    /* USER CODE BEGIN 3 */
+  }
+  /* USER CODE END 3 */
 }
 
 /**
- * @brief  检查是否进入 Bootloader 模式
- * @retval 0: 进入 APP, 1: 保持 Bootloader
- */
-static uint8_t CheckEnterBootloader(void)
+  * @brief System Clock Configuration
+  * @retval None
+  */
+void SystemClock_Config(void)
 {
-    /* 方法 1：检查复位标志（看门狗复位后进入 IAP） */
-    if (__HAL_RCC_GET_FLAG(RCC_FLAG_IWDGRST) != RESET) {
-        __HAL_RCC_CLEAR_RESET_FLAGS();
-        printf("[BOOT] 检测到看门狗复位\r\n");
-        return 1;
-    }
-    
-    /* 方法 2：检查按键（BOOT 按键） */
-    BOOT_GPIO_CLK_ENABLE();
-    
-    GPIO_InitTypeDef GPIO_InitStruct = {0};
-    GPIO_InitStruct.Pin = BOOT_PIN;
-    GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-    GPIO_InitStruct.Pull = GPIO_PULLUP;
-    HAL_GPIO_Init(BOOT_GPIO_PORT, &GPIO_InitStruct);
-    
-    HAL_Delay(50);  // 等待稳定
-    
-    if (HAL_GPIO_ReadPin(BOOT_GPIO_PORT, BOOT_PIN) == GPIO_PIN_RESET) {
-        HAL_Delay(50);  // 消抖
-        if (HAL_GPIO_ReadPin(BOOT_GPIO_PORT, BOOT_PIN) == GPIO_PIN_RESET) {
-            printf("[BOOT] 检测到 BOOT 按键按下\r\n");
-            return 1;
-        }
-    }
-    
-    /* 方法 3：检查 RAM 魔术字（APP 程序可设置此标志请求升级） */
-    if (*(volatile uint32_t *)0x20000000 == BOOT_FLAG_IAP) {
-        *(volatile uint32_t *)0x20000000 = 0;  // 清除标志
-        printf("[BOOT] 检测到 RAM 魔术字\r\n");
-        return 1;
-    }
-    
-    /* 方法 4：检查参数区标志 */
-    uint32_t boot_flag = *(volatile uint32_t *)BOOT_FLAG_ADDR;
-    if (boot_flag == BOOT_FLAG_IAP) {
-        printf("[BOOT] 检测到参数区 IAP 标志\r\n");
-        return 1;
-    }
-    
-    return 0;  // 进入 APP
-}
+  RCC_OscInitTypeDef RCC_OscInitStruct = {0};
+  RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
 
-/**
- * @brief  验证 APP 固件
- * @retval 0: 有效，1: 无效
- */
-static uint8_t VerifyAppFirmware(void)
-{
-    /* 检查 APP 区起始位置是否有有效代码 */
-    uint32_t app_stack = *(volatile uint32_t *)0x08010000;
-    uint32_t app_reset = *(volatile uint32_t *)(0x08010000 + 4);
-    
-    /* 简单的有效性检查 */
-    if (app_stack == 0xFFFFFFFF || app_reset == 0xFFFFFFFF) {
-        printf("[BOOT] APP 栈指针或复位向量为空\r\n");
-        return 1;
-    }
-    
-    /* 检查栈地址是否在 RAM 范围内（STM32F767 为 0x20000000-0x20080000） */
-    if (app_stack < 0x20000000 || app_stack > 0x20080000) {
-        printf("[BOOT] APP 栈指针地址无效：0x%08X\r\n", app_stack);
-        return 1;
-    }
-    
-    /* 检查复位向量地址是否在 Flash 范围内 */
-    if (app_reset < 0x08010000 || app_reset > 0x0810FFFF) {
-        printf("[BOOT] APP 复位向量地址无效：0x%08X\r\n", app_reset);
-        return 1;
-    }
-    
-    printf("[BOOT] APP 验证通过\r\n");
-    return 0;  // 有效
-}
+  /** Configure the main internal regulator output voltage
+  */
+  __HAL_RCC_PWR_CLK_ENABLE();
+  __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE1);
 
-/**
- * @brief  跳转到 APP 程序
- */
-static void JumpToApp(void)
-{
-    /* 1. 禁用所有中断 */
-    __disable_irq();
-    
-    /* 2. 禁用 SysTick */
-    SysTick->CTRL = 0;
-    SysTick->LOAD = 0;
-    SysTick->VAL = 0;
-    
-    /* 3. 清除所有中断挂起 */
-    for (uint8_t i = 0; i < 8; i++) {
-        NVIC->ICPR[i] = 0xFFFFFFFF;
-        NVIC->ICER[i] = 0xFFFFFFFF;
-    }
-    
-    /* 4. 设置 APP 的栈指针 */
-    __set_MSP(*(volatile uint32_t *)0x08010000);
-    
-    /* 5. 获取 APP 复位向量 */
-    void (*app_reset_handler)(void) = 
-        (void (*)(void))(*(volatile uint32_t *)(0x08010000 + 4));
-    
-    /* 6. 设置向量表偏移（APP 需要） */
-    SCB->VTOR = 0x08010000;
-    
-    /* 7. 跳转 */
-    printf("[BOOT] 跳转地址：0x%08X\r\n", (uint32_t)app_reset_handler);
-    app_reset_handler();
-    
-    /* 永远不会到这里 */
-    while (1);
+  /** Initializes the RCC Oscillators according to the specified parameters
+  * in the RCC_OscInitTypeDef structure.
+  */
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
+  RCC_OscInitStruct.HSEState = RCC_HSE_ON;
+  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
+  RCC_OscInitStruct.PLL.PLLM = 25;
+  RCC_OscInitStruct.PLL.PLLN = 432;
+  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
+  RCC_OscInitStruct.PLL.PLLQ = 2;
+  RCC_OscInitStruct.PLL.PLLR = 2;
+  if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Activate the Over-Drive mode
+  */
+  if (HAL_PWREx_EnableOverDrive() != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Initializes the CPU, AHB and APB buses clocks
+  */
+  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
+                              |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
+  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV4;
+  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV2;
+
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_7) != HAL_OK)
+  {
+    Error_Handler();
+  }
 }
 
 /* USER CODE BEGIN 4 */
@@ -414,7 +273,6 @@ void Error_Handler(void)
   }
   /* USER CODE END Error_Handler_Debug */
 }
-
 #ifdef USE_FULL_ASSERT
 /**
   * @brief  Reports the name of the source file and the source line number
