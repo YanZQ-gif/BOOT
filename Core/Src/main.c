@@ -154,7 +154,8 @@ int main(void)
   if (cmd_received) {
       /* 进入 Bootloader 模式 */
       bIsBootloader = 1;
-      printf("[BOOT] 进入升级模式\r\n\r\n");
+      printf("[BOOT] 收到升级命令：UPDATE\r\n");
+      printf("[BOOT] 持续发送 'C' 等待上位机连接...\r\n\r\n");
       LED_Blink(LED1, 5, 200);
   } else {
       /* 窗口期结束，未收到升级命令 */
@@ -183,10 +184,33 @@ int main(void)
       /* 初始化 YModem */
       YMODEM_Init();
       
-      /* 发送 'C' 启动信号（CRC 模式） */
-      HAL_UART_Transmit(&huart2, (uint8_t*)"C", 1, 0xFFFF);
+      /* 持续发送 'C' 等待上位机响应 */
+      uint32_t wait_start = HAL_GetTick();
+      uint8_t pc_connected = 0;
       
-      printf("[IAP] 已发送启动信号，等待上位机...\r\n");
+      printf("[IAP] 持续发送 'C' 等待上位机连接...\r\n");
+      
+      /* 等待上位机响应，最多等待 10 秒 */
+      while ((HAL_GetTick() - wait_start) < 10000) {
+          /* 持续发送 'C' */
+          HAL_UART_Transmit(&huart2, (uint8_t*)"C", 1, 100);
+          HAL_Delay(100);  /* 每 100ms 发送一次 */
+          
+          /* 检查是否收到上位机响应 */
+          if (HAL_UART_Receive(&huart2, &rx_byte, 1, 10) == HAL_OK) {
+              /* 收到数据，说明上位机已连接 */
+              pc_connected = 1;
+              printf("[IAP] 上位机已连接，开始升级...\r\n\r\n");
+              break;
+          }
+      }
+      
+      if (!pc_connected) {
+          printf("[IAP] 等待超时，未检测到上位机\r\n");
+          printf("[IAP] 系统将在 2 秒后重启...\r\n");
+          HAL_Delay(2000);
+          NVIC_SystemReset();
+      }
       
       /* 主循环 - 接收 YModem 数据 */
       while (1) {
