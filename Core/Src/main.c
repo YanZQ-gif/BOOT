@@ -4,8 +4,8 @@
   * @file           : main.c
   * @brief          : Main program body - Bootloader with YModem
   * @author         : YanZQ-gif
-  * @date           : 2026-04-15
-  * @version        : V1.0.0 - Bootloader
+  * @date           : 2026-04-16
+  * @version        : V1.1.0 - Bootloader with UPDATE command
   ******************************************************************************
   */
 /* USER CODE END Header */
@@ -32,6 +32,11 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 
+/* 升级命令 */
+#define UPDATE_CMD        "UPDATE"
+#define UPDATE_CMD_LEN    6
+#define BOOT_WINDOW_TIME  1000    /* 1 秒窗口期 */
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -48,6 +53,8 @@ static uint8_t tx_buffer[16];
 static uint8_t tx_len;
 static YMODEM_T ym_ret;
 static uint8_t bIsBootloader = 0;
+static uint8_t update_cmd_buffer[UPDATE_CMD_LEN];
+static uint8_t update_cmd_index = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -110,21 +117,57 @@ int main(void)
   /* 上电指示 */
   LED_Blink(LED1, 3, 100);
   
-  /* 检查是否进入 Bootloader 模式 */
-  bIsBootloader = BOOT_CheckEnterBootloader();
+  printf("\r\n");
+  printf("========================================\r\n");
+  printf("  STM32F767 Bootloader\r\n");
+  printf("  Version: V1.1.0\r\n");
+  printf("========================================\r\n");
+  printf("[BOOT] 系统初始化完成\r\n");
+  printf("[BOOT] 等待升级指令窗口期：%dms\r\n", BOOT_WINDOW_TIME);
+  printf("[BOOT] 请输入 'UPDATE' 命令进入升级模式\r\n");
+  printf("========================================\r\n\r\n");
   
-  if (bIsBootloader) {
-      BOOT_EnterBootloaderMode();
-      LED_Blink(LED1, 5, 200);  // 5 次慢闪
+  /* 等待升级指令窗口期 */
+  uint32_t window_start = HAL_GetTick();
+  uint8_t cmd_received = 0;
+  
+  while ((HAL_GetTick() - window_start) < BOOT_WINDOW_TIME) {
+      if (HAL_UART_Receive(&huart2, &rx_byte, 1, 10) == HAL_OK) {
+          /* 接收字符并匹配命令 */
+          update_cmd_buffer[update_cmd_index++] = rx_byte;
+          
+          /* 检查是否匹配 UPDATE 命令 */
+          if (update_cmd_index >= UPDATE_CMD_LEN) {
+              if (memcmp(update_cmd_buffer, UPDATE_CMD, UPDATE_CMD_LEN) == 0) {
+                  cmd_received = 1;
+                  printf("[BOOT] 收到升级命令：UPDATE\r\n");
+                  break;
+              }
+              
+              /* 重置索引，继续匹配 */
+              update_cmd_index = 0;
+          }
+      }
+  }
+  
+  /* 检查是否收到升级命令 */
+  if (cmd_received) {
+      /* 进入 Bootloader 模式 */
+      bIsBootloader = 1;
+      printf("[BOOT] 进入升级模式\r\n\r\n");
+      LED_Blink(LED1, 5, 200);
   } else {
+      /* 窗口期结束，未收到升级命令 */
+      printf("[BOOT] 窗口期结束，未收到升级命令\r\n");
+      
       /* 检查 APP 是否有效 */
       if (!BOOT_VerifyAppFirmware()) {
           printf("[BOOT] APP 验证通过，准备跳转...\r\n");
-          LED_Blink(LED2, 2, 500);  // 2 次快闪
+          LED_Blink(LED2, 2, 500);
           HAL_Delay(500);
           BOOT_JumpToApp();
       } else {
-          printf("[BOOT] APP 无效，进入 Bootloader\r\n");
+          printf("[BOOT] APP 无效，进入升级模式\r\n");
           bIsBootloader = 1;
           LED_Blink(LED1, 5, 200);
       }
