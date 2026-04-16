@@ -281,6 +281,9 @@ uint8_t BOOT_CheckEnterBootloader(void)
  */
 void BOOT_JumpToApp(void)
 {
+    /* 0. 禁用 MPU（重要！防止内存保护冲突） */
+    HAL_MPU_Disable();
+    
     /* 1. 禁用所有中断 */
     __disable_irq();
     
